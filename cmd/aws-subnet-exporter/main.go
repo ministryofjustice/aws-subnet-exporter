@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ministryofjustice/aws-subnet-exporter/pkg/aws"
+	prom "github.com/ministryofjustice/aws-subnet-exporter/pkg/prometheus"
+	"github.com/ministryofjustice/aws-subnet-exporter/pkg/utils"
 	log "github.com/sirupsen/logrus"
-	"github.com/wcarlsen/aws-subnet-exporter/pkg/aws"
-	prom "github.com/wcarlsen/aws-subnet-exporter/pkg/prometheus"
-	"github.com/wcarlsen/aws-subnet-exporter/pkg/utils"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 
 var (
 	port   = flag.String("port", "8080", "The port to listen on for HTTP requests.")
-	region = flag.String("region", "eu-west-1", "AWS region")
+	region = flag.String("region", "eu-west-2", "AWS region")
 	filter = flag.String("filter", "*", "Filter subnets by tag regex when calling AWS (assumes tag key is Name")
 	period = flag.Duration("period", 60*time.Second, "Period for calling AWS in seconds")
 	debug  = flag.Bool("debug", false, "Enable debug logging")
@@ -52,6 +52,8 @@ func main() {
 			for _, v := range subnets {
 				prom.AvailableIPs.WithLabelValues(v.VPCID, v.SubnetID, v.CIDRBlock, v.AZ, v.Name).Set(v.AvailableIPs)
 				prom.MaxIPs.WithLabelValues(v.VPCID, v.SubnetID, v.CIDRBlock, v.AZ, v.Name).Set(v.MaxIPs)
+				prom.UsedPrefixes.WithLabelValues(v.VPCID, v.SubnetID, v.CIDRBlock, v.AZ, v.Name).Set(float64(v.UsedPrefixes))
+				prom.AvailablePrefixes.WithLabelValues(v.VPCID, v.SubnetID, v.CIDRBlock, v.AZ, v.Name).Set(float64(len(v.AvailablePrefixes)))
 			}
 
 			select {
