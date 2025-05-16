@@ -2,32 +2,26 @@ package aws
 
 import (
 	"context"
-	"net"
 
-	"github.com/apparentlymart/go-cidr/cidr"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/ministryofjustice/aws-subnet-exporter/pkg/utils"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	errCannotParseCIDRBlock    = "cannot parse CIDR block"
-	errCannotDescribeSubnets   = "cannot describe subnets"
-	errUnableToCalculateMaxIPs = "unable to calculate MaxIPs from at least one CIDR block"
-)
-
 type Subnet struct {
-	Name         string
-	SubnetID     string
-	VPCID        string
-	CIDRBlock    string
-	AZ           string
-	AvailableIPs float64
-	MaxIPs       float64
+	Name              string
+	SubnetID          string
+	VPCID             string
+	CIDRBlock         string
+	AZ                string
+	AvailableIPs      float64
+	MaxIPs            float64
+	UsedPrefixes      int
+	AvailablePrefixes []string
 }
 
-// Get subnets
 func GetSubnets(client *ec2.Client, filter string) ([]Subnet, error) {
 	log.Debug("Describing subnets")
 	nameIdentifier := "tag:Name"
@@ -39,42 +33,56 @@ func GetSubnets(client *ec2.Client, filter string) ([]Subnet, error) {
 	})
 	if err != nil {
 		log.Debug("Failed to describe subnets")
-		return nil, errors.Wrap(err, errCannotDescribeSubnets)
+		return nil, errors.Wrap(err, "cannot describe subnets")
 	}
 
 	var subnets []Subnet
 	for _, v := range resp.Subnets {
-		subnet := Subnet{
-			Name:         getNameFromTags(v.Tags),
-			SubnetID:     *v.SubnetId,
-			VPCID:        *v.VpcId,
-			CIDRBlock:    *v.CidrBlock,
-			AZ:           *v.AvailabilityZone,
-			AvailableIPs: float64(*v.AvailableIpAddressCount),
-		}
-		err := subnet.getMaxIPs()
+		subnet, err := processSubnet(client, v)
 		if err != nil {
-			return nil, errors.Wrap(err, errUnableToCalculateMaxIPs)
+			return nil, err
 		}
 		subnets = append(subnets, subnet)
 	}
 	return subnets, nil
 }
 
-func (s *Subnet) getMaxIPs() error {
-	_, IPNet, err := net.ParseCIDR(s.CIDRBlock)
-	if err != nil {
-		return errors.Wrap(err, errCannotParseCIDRBlock)
+func processSubnet(ec2Client *ec2.Client, v types.Subnet) (Subnet, error) {
+	log.Debugf("Processing subnet: %s", *v.SubnetId)
+	subnet := Subnet{
+		Name:         utils.GetNameFromTags(v.Tags),
+		SubnetID:     *v.SubnetId,
+		VPCID:        *v.VpcId,
+		CIDRBlock:    *v.CidrBlock,
+		AZ:           *v.AvailabilityZone,
+		AvailableIPs: float64(*v.AvailableIpAddressCount),
 	}
-	s.MaxIPs = float64(cidr.AddressCount(IPNet) - 2) // because we cannot use first and last
-	return nil
-}
 
-func getNameFromTags(tags []types.Tag) string {
-	for _, v := range tags {
-		if *v.Key == "Name" {
-			return *v.Value
-		}
+	describeSubnetsOutput := &ec2.DescribeSubnetsOutput{
+		Subnets: []types.Subnet{v},
 	}
-	return "UNKNOWN"
+
+	details, err := utils.EnrichSubnetData(describeSubnetsOutput)
+	if err != nil {
+		return Subnet{}, errors.Wrap(err, "unable to get subnet details")
+	}
+
+	subnet.MaxIPs = float64(details.TotalIPs)
+
+	networkInterfacesOutput, err := utils.DescribeNetworkInterfacesBySubnetID(context.TODO(), ec2Client, *v.SubnetId)
+	if err != nil {
+		return Subnet{}, errors.Wrap(err, "unable to describe network interfaces")
+	}
+	
+	prefixesInUse, ipsInUse, err := utils.EnrichIPsAndPrefixes(networkInterfacesOutput, details)
+	if err != nil {
+		return Subnet{}, errors.Wrap(err, "unable to get IPs and prefixes")
+	}
+
+	utils.CalculatePrefixes(details, prefixesInUse, ipsInUse)
+
+	subnet.UsedPrefixes = details.PrefixesInUse
+	subnet.AvailablePrefixes = details.AvailablePrefixes
+
+	return subnet, nil
 }

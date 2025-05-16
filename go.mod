@@ -1,9 +1,9 @@
-module github.com/wcarlsen/aws-subnet-exporter
+module github.com/ministryofjustice/aws-subnet-exporter
 
 go 1.19
 
 require (
-	github.com/apparentlymart/go-cidr v1.1.0
+	github.com/aws/aws-sdk-go-v2 v1.17.3
 	github.com/aws/aws-sdk-go-v2/config v1.18.8
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.78.0
 	github.com/pkg/errors v0.9.1
@@ -12,7 +12,6 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.17.3 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.8 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.21 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.27 // indirect

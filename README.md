@@ -1,20 +1,18 @@
 # AWS subnet exporter
-Fetch AWS subnet available IP count and expose it as Prometheus metrics. Why? Because AWS does not expose these in CloudWatch and you don't want to run out of available IP's in your subnets.
+
+Fetch AWS subnet data and expose it as Prometheus metrics. Why? Because AWS does not expose these in CloudWatch and you don't want to run out of available IP's in your subnets.
+
+This data comprises of ip address count, max and used, for subnets, as well as available contiguous subnet prefixes availables - this is especially important for our EKS nodes.
+
+[This video](https://www.youtube.com/watch?v=RBE3yk2UlYA) is a great explainer for how CNI works and why its important to us.
 
 ## Metrics exported
+
 ```
-# Curl metrics example
-curl http://localhost:8080/metrics
-
-# HELP aws_subnet_exporter_available_ips Available IPs in subnets
-# TYPE aws_subnet_exporter_available_ips gauge
-aws_subnet_exporter_available_ips{az="eu-west-1a",cidrblock="10.103.0.0/28",name="eks_clu_eu-west-1a",subnetid="subnet-XXX",vpcid="vpc-YYY"} 10
-...
-
-# HELP aws_subnet_exporter_max_ips Max host IPs in subnet
-# TYPE aws_subnet_exporter_max_ips gauge
-aws_subnet_exporter_max_ips{az="eu-west-1a",cidrblock="10.103.0.0/28",name="eks_clu_eu-west-1a",subnetid="subnet-XXX",vpcid="vpc-YYY"} 14
-...
+aws_subnet_exporter_available_ips
+aws_subnet_exporter_available_prefixes Available prefixes in subnets
+aws_subnet_exporter_used_prefixes Used prefixes in subnets
+aws_subnet_exporter_max_ips Max host IPs in subnet
 ```
 
 ## Assumptions
@@ -27,7 +25,7 @@ You require this policy to your user/role (use roles for best practice) in order
     "Version": "2012-10-17",
     "Statement": [
         {
-            "Sid": "VisualEditor0",
+            "Sid": "some-sid",
             "Effect": "Allow",
             "Action": "ec2:DescribeSubnets",
             "Resource": "*"
@@ -36,17 +34,24 @@ You require this policy to your user/role (use roles for best practice) in order
 }
 ```
 
-## Running
-You have to provide an AWS context and I will not cover how to do this here.
+## Testing locally
+
+Go run directly:
+
+- Set your AWS creds
 
 ```bash
-docker run -p 8080:8080 -e AWS_ACCESS_KEY_ID=xyz -e AWS_SECRET_ACCESS_KEY=aaa ghcr.io/wcarlsen/aws-subnet-exporter:latest ./aws-subnet-exporter --port="8080" --region="eu-west-1" --filter="*" --period="60" --debug
+go run cmd/aws-subnet-exporter/main.go
 ```
 
-## Helm install
-For installing the exporter using helm. Do the following.
-```bash
-helm repo add aws-subnet-exporter https://wcarlsen.github.io/aws-subnet-exporter/
-helm repo update
-helm install --generate-name aws-subnet-exporter/aws-subnet-exporter
+This will launch with default params set (all subnets for region and current account)
+
+and then check your metrics outpur
+
 ```
+curl localhost:8080/metrics
+```
+
+## Helm
+
+Helm charts for the exporter are published in [cloud-platform-helm-charts](https://github.com/ministryofjustice/cloud-platform-helm-charts/tree/main/aws-subnet-exporter)
