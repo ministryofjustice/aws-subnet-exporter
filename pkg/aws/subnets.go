@@ -58,16 +58,12 @@ func processSubnet(client *ec2.Client, v types.Subnet) (Subnet, error) {
         AvailableIPs: float64(*v.AvailableIpAddressCount),
     }
 
-    maxIPs, err := utils.CalculateMaxIPs(subnet.CIDRBlock)
-    if err != nil {
-        return Subnet{}, errors.Wrap(err, "unable to calculate MaxIPs from at least one CIDR block")
-    }
-    subnet.MaxIPs = maxIPs
-
     details, err := utils.GetSubnetDetails(context.TODO(), client, subnet.SubnetID)
     if err != nil {
         return Subnet{}, errors.Wrap(err, "unable to get subnet details")
     }
+
+    subnet.MaxIPs = float64(details.TotalIPs)
 
     prefixesInUse, ipsInUse, err := utils.GetIPsAndPrefixes(context.TODO(), client, subnet.SubnetID, details)
     if err != nil {
