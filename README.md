@@ -11,7 +11,6 @@ This data comprises of ip address count, max and used, for subnets, as well as a
 ```
 aws_subnet_exporter_available_ips
 aws_subnet_exporter_available_prefixes Available prefixes in subnets
-aws_subnet_exporter_max_ips Max host IPs in subnet
 aws_subnet_exporter_used_prefixes Used prefixes in subnets
 aws_subnet_exporter_max_ips Max host IPs in subnet
 ```
