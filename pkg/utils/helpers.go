@@ -69,14 +69,20 @@ func splitIP(ip string) ([]int, error) {
     return result, nil
 }
 
-func GetSubnetDetails(ctx context.Context, ec2Client *ec2.Client, subnetID string) (*SubnetDetails, error) {
+func DescribeSubnetByID(ctx context.Context, ec2Client *ec2.Client, subnetID string) (*ec2.DescribeSubnetsOutput, error) {
     output, err := ec2Client.DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{
         SubnetIds: []string{subnetID},
     })
     if err != nil {
         return nil, fmt.Errorf("failed to describe subnets: %w", err)
     }
+    return output, nil
+}
 
+func EnrichSubnetData(output *ec2.DescribeSubnetsOutput) (*SubnetDetails, error) {
+    if len(output.Subnets) == 0 {
+        return nil, fmt.Errorf("no subnets found in output")
+    }
     subnetCIDR := aws.ToString(output.Subnets[0].CidrBlock)
     ip, mask, err := splitCIDR(subnetCIDR)
     if err != nil {
@@ -101,7 +107,7 @@ func GetSubnetDetails(ctx context.Context, ec2Client *ec2.Client, subnetID strin
     }, nil
 }
 
-func GetIPsAndPrefixes(ctx context.Context, ec2Client *ec2.Client, subnetID string, details *SubnetDetails) (map[string]bool, map[string]bool, error) {
+func DescribeNetworkInterfacesBySubnetID(ctx context.Context, ec2Client *ec2.Client, subnetID string) (*ec2.DescribeNetworkInterfacesOutput, error) {
     output, err := ec2Client.DescribeNetworkInterfaces(ctx, &ec2.DescribeNetworkInterfacesInput{
         Filters: []types.Filter{
             {
@@ -111,9 +117,12 @@ func GetIPsAndPrefixes(ctx context.Context, ec2Client *ec2.Client, subnetID stri
         },
     })
     if err != nil {
-        return nil, nil, fmt.Errorf("failed to describe network interfaces: %w", err)
+        return nil, fmt.Errorf("failed to describe network interfaces: %w", err)
     }
+    return output, nil
+}
 
+func EnrichIPsAndPrefixes(output *ec2.DescribeNetworkInterfacesOutput, details *SubnetDetails) (map[string]bool, map[string]bool, error) {
     prefixesInUse := make(map[string]bool)
     ipsInUse := make(map[string]bool)
     ipsPerPrefix := 16
@@ -174,6 +183,7 @@ func CalculatePrefixes(details *SubnetDetails, prefixesInUse map[string]bool, ip
 
     details.AvailablePrefixes = availablePrefixes
     details.FreeIPs = details.TotalIPs - details.AllocatedIPs
+
 }
 
 func GetNameFromTags(tags []types.Tag) string {
